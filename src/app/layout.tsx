@@ -15,9 +15,34 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BianBattle — See Every Side with AI",
+  title: "BianBattle｜線上辯論配對平台",
   description:
-    "真人線上辯論配對平台，支援辯論房、嘴砲房、排位賽、1v1、3v3、5v5 對戰。AI 擔任主持人、裁判與賽後分析教練。",
+    "BianBattle 是一個真人線上辯論配對平台，支援辯論房、嘴砲房、排位賽、1v1、3v3、5v5 對戰，並使用 AI 擔任主持人、裁判與賽後分析教練。",
+  keywords: [
+    "BianBattle",
+    "線上辯論",
+    "辯論平台",
+    "嘴砲房",
+    "排位賽",
+    "AI 裁判",
+    "debate platform",
+  ],
+  openGraph: {
+    title: "BianBattle｜線上辯論配對平台",
+    description:
+      "真人線上辯論配對平台，支援辯論房、嘴砲房、排位賽、1v1、3v3、5v5 對戰。AI 擔任主持人、裁判與賽後分析教練。",
+    url: "https://bianbattle.com",
+    siteName: "BianBattle",
+    locale: "zh_TW",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "BianBattle｜線上辯論配對平台",
+    description:
+      "真人線上辯論配對平台，支援辯論房、嘴砲房、排位賽、1v1、3v3、5v5 對戰。AI 擔任主持人、裁判與賽後分析教練。",
+  },
+  metadataBase: new URL("https://bianbattle.com"),
 };
 
 export default function RootLayout({
