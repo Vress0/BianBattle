@@ -1,2 +1,2 @@
-# AI-Debate-Room-See-Every-Side-with-AI
-AI 辯論室｜讓 AI 幫你看見不同觀點
+# BianBattle
+一個讓使用者練習辯論、看見不同觀點的 AI 平台。
