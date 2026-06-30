@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { PRESET_TOPICS } from "@/lib/constants";
 
 interface CreateMatchFormProps {
   mode: "debate" | "banter";
@@ -15,6 +16,8 @@ export default function CreateMatchForm({ mode, currentUserId }: CreateMatchForm
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [topic, setTopic] = useState("");
+  const [proPosition, setProPosition] = useState("");
+  const [conPosition, setConPosition] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,9 +31,11 @@ export default function CreateMatchForm({ mode, currentUserId }: CreateMatchForm
   const titlePlaceholder = isDebate
     ? "e.g. 正式辯論：AI 與司法"
     : "e.g. 貓咪 vs 狗狗誰更棒？";
-  const topicPlaceholder = isDebate
-    ? "e.g. AI 應取代人類法官嗎？"
-    : "e.g. 貓咪還是狗狗？";
+
+  function handleRandomTopic() {
+    const random = PRESET_TOPICS[Math.floor(Math.random() * PRESET_TOPICS.length)];
+    setTopic(random);
+  }
 
   if (!currentUserId) {
     return (
@@ -67,6 +72,8 @@ export default function CreateMatchForm({ mode, currentUserId }: CreateMatchForm
       .insert({
         title: title.trim(),
         topic: topic.trim() || null,
+        pro_position: proPosition.trim() || null,
+        con_position: conPosition.trim() || null,
         mode,
         format: "1v1",
         created_by: currentUserId,
@@ -106,18 +113,57 @@ export default function CreateMatchForm({ mode, currentUserId }: CreateMatchForm
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-slate-400" htmlFor="match-topic">
-            辯題（選填）
-          </label>
+          <div className="mb-1 flex items-center justify-between">
+            <label className="block text-xs text-slate-400" htmlFor="match-topic">
+              辯題（選填）
+            </label>
+            <button
+              type="button"
+              onClick={handleRandomTopic}
+              className="text-xs text-slate-400 underline-offset-2 hover:text-white hover:underline"
+            >
+              🎲 隨機辯題
+            </button>
+          </div>
           <input
             id="match-topic"
             type="text"
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
-            placeholder={topicPlaceholder}
+            placeholder="例如：AI 是否應該擁有投票權？"
             maxLength={120}
             className={`w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:ring-1 ${inputFocusCls}`}
           />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="mb-1 block text-xs text-slate-400" htmlFor="match-pro-position">
+              正方立場（選填）
+            </label>
+            <input
+              id="match-pro-position"
+              type="text"
+              value={proPosition}
+              onChange={(e) => setProPosition(e.target.value)}
+              placeholder="例如：應該"
+              maxLength={60}
+              className={`w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:ring-1 ${inputFocusCls}`}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-slate-400" htmlFor="match-con-position">
+              反方立場（選填）
+            </label>
+            <input
+              id="match-con-position"
+              type="text"
+              value={conPosition}
+              onChange={(e) => setConPosition(e.target.value)}
+              placeholder="例如：不應該"
+              maxLength={60}
+              className={`w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:ring-1 ${inputFocusCls}`}
+            />
+          </div>
         </div>
         {error && <p className="text-xs text-red-400">{error}</p>}
         <div className="flex gap-2">

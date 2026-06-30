@@ -16,7 +16,7 @@ export default async function MatchPage({ params }: PageProps) {
 
   const { data: match } = await supabase
     .from("matches")
-    .select("id, title, mode, format, status, topic, created_by, winner_side, started_at, ended_at, ended_reason, surrendered_by, is_rated, created_at, updated_at")
+    .select("id, title, mode, format, status, topic, pro_position, con_position, created_by, winner_side, started_at, ended_at, ended_reason, surrendered_by, is_rated, created_at, updated_at")
     .eq("id", id)
     .single();
 
@@ -73,6 +73,8 @@ export default async function MatchPage({ params }: PageProps) {
             mode: match.mode,
             status: match.status,
             topic: match.topic,
+            pro_position: match.pro_position ?? null,
+            con_position: match.con_position ?? null,
             started_at: match.started_at ?? null,
             ended_at: match.ended_at ?? null,
             ended_reason: match.ended_reason ?? null,

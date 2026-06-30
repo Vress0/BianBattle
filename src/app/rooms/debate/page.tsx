@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import CreateMatchForm from "@/components/room/CreateMatchForm";
+import RoomListClient, { type RoomEntry } from "@/components/room/RoomListClient";
 
 export default async function DebateRoomPage() {
   const supabase = await createClient();
@@ -8,32 +8,55 @@ export default async function DebateRoomPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Fetch waiting/active debate matches
-  const { data: matches } = await supabase
+  const { data: matches, error: matchesError } = await supabase
     .from("matches")
-    .select("id, title, topic, status, created_at")
+    .select("id, title, topic, status, winner_side, is_rated, created_at")
     .eq("mode", "debate")
-    .in("status", ["waiting", "active"])
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(50);
 
-  // Fetch player presence for each match
   const matchIds = matches?.map((m) => m.id) ?? [];
-  const playersByMatch: Record<string, { pro: boolean; con: boolean }> = {};
+  const playersByMatch: Record<string, { pro: string | null; con: string | null }> = {};
 
   if (matchIds.length > 0) {
     const { data: players } = await supabase
       .from("match_players")
-      .select("match_id, side")
+      .select("match_id, side, user_id")
       .in("match_id", matchIds);
 
+    const userIds = [...new Set((players ?? []).map((p) => p.user_id))];
+    const nicknameMap: Record<string, string | null> = {};
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, nickname")
+        .in("id", userIds);
+      for (const p of profiles ?? []) nicknameMap[p.id] = p.nickname ?? null;
+    }
+
     for (const p of players ?? []) {
-      if (!playersByMatch[p.match_id])
-        playersByMatch[p.match_id] = { pro: false, con: false };
-      if (p.side === "pro") playersByMatch[p.match_id].pro = true;
-      if (p.side === "con") playersByMatch[p.match_id].con = true;
+      if (!playersByMatch[p.match_id]) playersByMatch[p.match_id] = { pro: null, con: null };
+      const name = nicknameMap[p.user_id] ?? p.user_id.slice(0, 8);
+      if (p.side === "pro") playersByMatch[p.match_id].pro = name;
+      if (p.side === "con") playersByMatch[p.match_id].con = name;
     }
   }
+
+  const rooms: RoomEntry[] = (matches ?? []).map((m) => {
+    const slots = playersByMatch[m.id] ?? { pro: null, con: null };
+    return {
+      id: m.id,
+      title: m.title,
+      topic: m.topic,
+      status: m.status,
+      winner_side: m.winner_side,
+      is_rated: m.is_rated,
+      created_at: m.created_at,
+      proNickname: slots.pro,
+      conNickname: slots.con,
+      filled: (slots.pro ? 1 : 0) + (slots.con ? 1 : 0),
+    };
+  });
 
   return (
     <main className="min-h-screen bg-slate-950">
@@ -48,68 +71,20 @@ export default async function DebateRoomPage() {
 
         <div className="mt-10 flex flex-wrap items-center justify-between gap-4">
           <h2 className="text-lg font-semibold text-white">
-            等待中的房間
-            {matches && matches.length > 0 && (
-              <span className="ml-2 text-sm font-normal text-slate-500">
-                ({matches.length})
-              </span>
+            房間列表
+            {rooms.length > 0 && (
+              <span className="ml-2 text-sm font-normal text-slate-500">({rooms.length})</span>
             )}
           </h2>
           <CreateMatchForm mode="debate" currentUserId={user?.id ?? null} />
         </div>
 
-        {matches && matches.length > 0 ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {matches.map((match) => {
-              const slots = playersByMatch[match.id] ?? { pro: false, con: false };
-              const filled = (slots.pro ? 1 : 0) + (slots.con ? 1 : 0);
-              const isActive = match.status === "active";
-
-              return (
-                <Link
-                  key={match.id}
-                  href={`/matches/${match.id}`}
-                  className="group rounded-xl border border-slate-800 bg-slate-900 p-4 transition-colors hover:border-indigo-700/60 hover:bg-slate-800/60"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-semibold text-white group-hover:text-indigo-300 line-clamp-1">
-                      {match.title}
-                    </p>
-                    <span
-                      className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        isActive
-                          ? "bg-green-900/50 text-green-400"
-                          : "bg-yellow-900/50 text-yellow-400"
-                      }`}
-                    >
-                      {isActive ? "對戰中" : "等待對手"}
-                    </span>
-                  </div>
-                  {match.topic && (
-                    <p className="mt-1 line-clamp-1 text-sm text-slate-400">
-                      {match.topic}
-                    </p>
-                  )}
-                  <div className="mt-3 flex items-center gap-3 text-xs text-slate-500">
-                    <span>玩家 {filled}/2</span>
-                    <span>·</span>
-                    <span>1v1</span>
-                    {filled === 2 && !isActive && (
-                      <>
-                        <span>·</span>
-                        <span className="text-yellow-500">已滿</span>
-                      </>
-                    )}
-                  </div>
-                </Link>
-              );
-            })}
+        {matchesError ? (
+          <div className="mt-10 rounded-xl border border-red-900/50 bg-red-950/20 py-14 text-center">
+            <p className="text-red-400">載入房間列表時發生錯誤，請稍後再試。</p>
           </div>
         ) : (
-          <div className="mt-10 rounded-xl border border-dashed border-slate-700 py-14 text-center">
-            <p className="text-slate-500">目前沒有進行中的辯論房</p>
-            <p className="mt-1 text-sm text-slate-600">成為第一個建立房間的人！</p>
-          </div>
+          <RoomListClient mode="debate" rooms={rooms} />
         )}
       </div>
     </main>

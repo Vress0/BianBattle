@@ -8,13 +8,14 @@ import type { DbMatch, DbMatchPlayer, DbMatchMessage, DbMatchTypingStatus } from
 import TypingIndicator from "@/components/match/TypingIndicator";
 import SpeechInputButton from "@/components/match/SpeechInputButton";
 import { GRACE_PERIOD_SECONDS } from "@/lib/match-rules";
+import { formatShortTime } from "@/lib/match-display";
 
 // ─── Prop types ──────────────────────────────────────────────────────────────
 
 interface MatchRoomProps {
   match: Pick<
     DbMatch,
-    | "id" | "title" | "mode" | "status" | "topic"
+    | "id" | "title" | "mode" | "status" | "topic" | "pro_position" | "con_position"
     | "started_at" | "ended_at" | "ended_reason" | "winner_side" | "is_rated"
   >;
   proPlayer: Pick<DbMatchPlayer, "user_id" | "nickname" | "disconnected_at" | "forfeit_deadline_at"> | null;
@@ -40,10 +41,7 @@ const TYPING_STALE_MS = 5000;
 const TYPING_POLL_MS = 2000;
 const TIMEOUT_CHECK_MS = 10000;
 
-function fmtTime(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
-}
+const fmtTime = formatShortTime;
 
 function playerName(p: Pick<DbMatchPlayer, "user_id" | "nickname"> | null): string {
   if (!p) return "（空缺）";
@@ -60,15 +58,17 @@ function endedBannerText(
   const loser = winnerSide === "pro" ? "反方" : winnerSide === "con" ? "正方" : null;
   switch (endedReason) {
     case "grace_surrender":
-      return "比賽已取消：開局 15 秒內認輸，不計入戰績。";
+      return "比賽已取消：開局 15 秒內認輸，不計入戰績";
     case "grace_leave":
-      return "比賽已取消：開局 15 秒內有玩家離開，不計入戰績。";
+      return "比賽已取消：開局 15 秒內離開，不計入戰績";
     case "surrender":
       return winner && loser ? `比賽已結束：${winner}獲勝（${loser}認輸）` : "比賽已結束";
     case "timeout":
       return winner && loser ? `比賽已結束：${winner}獲勝（${loser}超時棄賽）` : "比賽已結束";
+    case "cancelled":
+      return "比賽已取消";
     default:
-      return "比賽已結束";
+      return status === "cancelled" ? "比賽已取消" : "比賽已結束";
   }
 }
 
@@ -102,6 +102,10 @@ export default function MatchRoom({
   // Opponent forfeit countdown (seconds left until deadline, or null)
   const [forfeitLeft, setForfeitLeft] = useState<number | null>(null);
 
+  // Copy-link button — only touches navigator.clipboard after mount (hydration-safe)
+  const [mounted, setMounted] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ─── Derived state ──────────────────────────────────────────────────────────
@@ -120,6 +124,9 @@ export default function MatchRoom({
   const inGracePeriod = isActive && graceLeft !== null && graceLeft > 0;
 
   const opponentPlayer = currentSide === "pro" ? conPlayer : currentSide === "con" ? proPlayer : null;
+  // Extracted to a plain variable so the forfeit-countdown effect dep array is never optional-chained
+  const opponentDeadline = opponentPlayer?.forfeit_deadline_at ?? null;
+
   const opponentDisconnected =
     match.status === "active" &&
     match.ended_at === null &&
@@ -230,16 +237,21 @@ export default function MatchRoom({
     return () => clearInterval(id);
   }, [match.status, match.started_at]);
 
-  // Opponent forfeit countdown
+  // Opponent forfeit countdown — deps array is always exactly 4 items, never conditional
   useEffect(() => {
-    const deadline = opponentPlayer?.forfeit_deadline_at;
-    if (!deadline || !isActive || match.ended_at !== null || match.ended_reason !== null) return;
-    const deadlineMs = new Date(deadline).getTime();
+    if (!opponentDeadline || !isActive || match.ended_at !== null || match.ended_reason !== null) return;
+    const deadlineMs = new Date(opponentDeadline).getTime();
     const id = setInterval(() => {
       setForfeitLeft(Math.max(0, Math.ceil((deadlineMs - Date.now()) / 1000)));
     }, 500);
     return () => clearInterval(id);
-  }, [opponentPlayer?.forfeit_deadline_at, isActive, match.ended_at, match.ended_reason]);
+  }, [opponentDeadline, isActive, match.ended_at, match.ended_reason]);
+
+  // Detect mount before allowing clipboard access (hydration-safe)
+  useEffect(() => {
+    const id = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(id);
+  }, []);
 
   // Poll check-timeout when active
   useEffect(() => {
@@ -355,6 +367,16 @@ export default function MatchRoom({
     }
   }
 
+  async function handleCopyLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("error");
+    }
+    setTimeout(() => setCopyStatus("idle"), 2500);
+  }
+
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   const bannerText = endedBannerText(match.status, match.ended_reason, match.winner_side);
@@ -381,16 +403,31 @@ export default function MatchRoom({
           </Link>
         )}
 
-        {/* Surrender button */}
-        {isActive && isParticipant && (
-          <button
-            onClick={handleSurrender}
-            disabled={actionLoading}
-            className="rounded-lg border border-red-800/60 px-3 py-1 text-xs text-red-400 transition-colors hover:bg-red-900/30 disabled:opacity-50"
-          >
-            認輸
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {mounted && (
+            <button
+              onClick={handleCopyLink}
+              className="rounded-lg border border-slate-700 px-3 py-1 text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+            >
+              {copyStatus === "copied"
+                ? "已複製"
+                : copyStatus === "error"
+                  ? "複製失敗，請手動複製網址"
+                  : "🔗 複製房間連結"}
+            </button>
+          )}
+
+          {/* Surrender button */}
+          {isActive && isParticipant && (
+            <button
+              onClick={handleSurrender}
+              disabled={actionLoading}
+              className="rounded-lg border border-red-800/60 px-3 py-1 text-xs text-red-400 transition-colors hover:bg-red-900/30 disabled:opacity-50"
+            >
+              認輸
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Header card */}
@@ -398,8 +435,19 @@ export default function MatchRoom({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-white">{match.title}</h1>
-            {match.topic && (
-              <p className="mt-1 text-sm text-slate-400">辯題：{match.topic}</p>
+            {match.topic ? (
+              <>
+                <p className="mt-1 text-sm text-slate-400">辯題：{match.topic}</p>
+                {(match.pro_position || match.con_position) && (
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {match.pro_position && <>正方立場：{match.pro_position}</>}
+                    {match.pro_position && match.con_position && "　"}
+                    {match.con_position && <>反方立場：{match.con_position}</>}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="mt-1 text-sm text-slate-500">自由辯論</p>
             )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -442,13 +490,19 @@ export default function MatchRoom({
       {/* Ended banner */}
       {bannerText && (
         <div
-          className={`mt-3 rounded-lg px-4 py-3 text-sm font-medium ${
+          className={`mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-3 text-sm font-medium ${
             match.is_rated
               ? "border border-indigo-800/50 bg-indigo-950/40 text-indigo-300"
               : "border border-slate-700/50 bg-slate-900/60 text-slate-400"
           }`}
         >
-          {bannerText}
+          <span>{bannerText}</span>
+          <button
+            onClick={() => router.push(`/matches/${match.id}/result`)}
+            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-500"
+          >
+            查看比賽結果
+          </button>
         </div>
       )}
 

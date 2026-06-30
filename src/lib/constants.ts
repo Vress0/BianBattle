@@ -61,3 +61,16 @@ export const RANK_MMR_THRESHOLDS: Record<RankTier, number> = {
 };
 
 export const MATCH_MODES = ["1v1", "3v3", "5v5"] as const;
+
+export const PRESET_TOPICS: string[] = [
+  "人工智慧是否應該擁有投票權？",
+  "死刑是否應該被廢除？",
+  "社群媒體對青少年的影響利大於弊？",
+  "核能是否是解決能源危機的最佳方案？",
+  "遠距工作是否應該成為企業常態？",
+  "動物實驗是否應該全面禁止？",
+  "全民基本收入是否能有效解決貧富差距？",
+  "網路言論是否應該採取實名制？",
+  "基因編輯技術是否應該用於人類胚胎？",
+  "學校是否應該全面禁止學生使用手機？",
+];

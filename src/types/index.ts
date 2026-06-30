@@ -110,6 +110,8 @@ export interface DbMatch {
   format: string;
   status: string;
   topic: string | null;
+  pro_position: string | null;
+  con_position: string | null;
   created_by: string | null;
   winner_side: string | null;
   started_at: string | null;
