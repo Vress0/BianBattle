@@ -14,29 +14,26 @@ export default async function MatchPage({ params }: PageProps) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Fetch match
   const { data: match } = await supabase
     .from("matches")
-    .select("id, title, mode, format, status, topic, created_by, winner_side, created_at, updated_at")
+    .select("id, title, mode, format, status, topic, created_by, winner_side, started_at, ended_at, ended_reason, surrendered_by, is_rated, created_at, updated_at")
     .eq("id", id)
     .single();
 
   if (!match) notFound();
 
-  // Fetch players
   const { data: rawPlayers } = await supabase
     .from("match_players")
-    .select("id, match_id, user_id, side, joined_at")
+    .select("id, match_id, user_id, side, joined_at, disconnected_at, forfeit_deadline_at, forfeited_at, last_seen_at")
     .eq("match_id", id);
 
-  // Fetch messages ordered by time
   const { data: rawMessages } = await supabase
     .from("match_messages")
     .select("id, match_id, user_id, side, content, round, created_at")
     .eq("match_id", id)
     .order("created_at", { ascending: true });
 
-  // Resolve profiles for all involved users in a single query
+  // Resolve profiles for all involved users
   const playerUserIds = rawPlayers?.map((p) => p.user_id) ?? [];
   const messageUserIds = rawMessages?.map((m) => m.user_id) ?? [];
   const allUserIds = [...new Set([...playerUserIds, ...messageUserIds])];
@@ -52,10 +49,8 @@ export default async function MatchPage({ params }: PageProps) {
     }
   }
 
-  const proPlayer =
-    rawPlayers?.find((p) => p.side === "pro") ?? null;
-  const conPlayer =
-    rawPlayers?.find((p) => p.side === "con") ?? null;
+  const proRaw = rawPlayers?.find((p) => p.side === "pro") ?? null;
+  const conRaw = rawPlayers?.find((p) => p.side === "con") ?? null;
 
   const messages = (rawMessages ?? []).map((m) => ({
     id: m.id,
@@ -78,15 +73,30 @@ export default async function MatchPage({ params }: PageProps) {
             mode: match.mode,
             status: match.status,
             topic: match.topic,
+            started_at: match.started_at ?? null,
+            ended_at: match.ended_at ?? null,
+            ended_reason: match.ended_reason ?? null,
+            winner_side: match.winner_side ?? null,
+            is_rated: match.is_rated ?? true,
           }}
           proPlayer={
-            proPlayer
-              ? { user_id: proPlayer.user_id, nickname: profileMap[proPlayer.user_id] ?? null }
+            proRaw
+              ? {
+                  user_id: proRaw.user_id,
+                  nickname: profileMap[proRaw.user_id] ?? null,
+                  disconnected_at: proRaw.disconnected_at ?? null,
+                  forfeit_deadline_at: proRaw.forfeit_deadline_at ?? null,
+                }
               : null
           }
           conPlayer={
-            conPlayer
-              ? { user_id: conPlayer.user_id, nickname: profileMap[conPlayer.user_id] ?? null }
+            conRaw
+              ? {
+                  user_id: conRaw.user_id,
+                  nickname: profileMap[conRaw.user_id] ?? null,
+                  disconnected_at: conRaw.disconnected_at ?? null,
+                  forfeit_deadline_at: conRaw.forfeit_deadline_at ?? null,
+                }
               : null
           }
           messages={messages}

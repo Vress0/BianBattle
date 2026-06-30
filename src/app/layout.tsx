@@ -43,6 +43,15 @@ export const metadata: Metadata = {
       "真人線上辯論配對平台，支援辯論房、嘴砲房、排位賽、1v1、3v3、5v5 對戰。AI 擔任主持人、裁判與賽後分析教練。",
   },
   metadataBase: new URL("https://bianbattle.com"),
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.png", type: "image/png" },
+      { url: "/icons/bianbattle-icon.png", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: [{ url: "/apple-icon.png", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({

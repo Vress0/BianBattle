@@ -95,6 +95,14 @@ export interface RecentMatch {
 
 // --- Supabase DB row types ---
 
+export type MatchEndedReason =
+  | "surrender"
+  | "timeout"
+  | "grace_surrender"
+  | "grace_leave"
+  | "cancelled"
+  | string;
+
 export interface DbMatch {
   id: string;
   title: string;
@@ -104,6 +112,11 @@ export interface DbMatch {
   topic: string | null;
   created_by: string | null;
   winner_side: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  ended_reason: MatchEndedReason | null;
+  surrendered_by: string | null;
+  is_rated: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -115,6 +128,10 @@ export interface DbMatchPlayer {
   side: string;
   joined_at: string;
   nickname: string | null;
+  last_seen_at: string | null;
+  disconnected_at: string | null;
+  forfeit_deadline_at: string | null;
+  forfeited_at: string | null;
 }
 
 export interface DbMatchMessage {
@@ -126,4 +143,12 @@ export interface DbMatchMessage {
   round: number;
   created_at: string;
   nickname: string | null;
+}
+
+export interface DbMatchTypingStatus {
+  match_id: string;
+  user_id: string;
+  side: string;
+  is_typing: boolean;
+  last_typed_at: string;
 }
