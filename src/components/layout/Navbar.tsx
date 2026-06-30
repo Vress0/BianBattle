@@ -49,7 +49,7 @@ export default async function Navbar() {
             ))}
           </nav>
           <NavbarAuthSection
-            user={user ? { email: user.email, id: user.id, nickname } : null}
+            user={user ? { id: user.id, nickname } : null}
           />
         </div>
       </div>

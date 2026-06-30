@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const GENERIC_ERROR = "用戶名或密碼錯誤，請再試一次。";
+const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
 
 export async function POST(request: NextRequest) {
   let body: unknown;
@@ -12,44 +13,45 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
   }
 
-  const { identifier, password } = body as { identifier?: string; password?: string };
+  const { username, password } = body as { username?: string; password?: string };
 
-  if (!identifier || !password) {
+  if (!username || !password) {
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
   }
 
-  // Resolve email: if identifier has @, treat as email; otherwise look up nickname
-  let email: string;
-
-  if (identifier.includes("@")) {
-    email = identifier.trim().toLowerCase();
-  } else {
-    try {
-      const admin = createAdminClient();
-
-      const { data: profile } = await admin
-        .from("profiles")
-        .select("id")
-        .eq("nickname", identifier.trim())
-        .single();
-
-      if (!profile?.id) {
-        return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
-      }
-
-      const { data: userData } = await admin.auth.admin.getUserById(profile.id);
-
-      if (!userData.user?.email) {
-        return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
-      }
-
-      email = userData.user.email;
-    } catch {
-      return NextResponse.json({ error: GENERIC_ERROR }, { status: 500 });
-    }
+  const trimmedUsername = username.trim();
+  if (!USERNAME_RE.test(trimmedUsername)) {
+    return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
   }
 
-  // Pre-create the success response so the cookie handler can write to it
+  const normalizedUsername = trimmedUsername.toLowerCase();
+
+  let email: string;
+  try {
+    const admin = createAdminClient();
+
+    // Case-insensitive lookup by nickname
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("id")
+      .ilike("nickname", normalizedUsername)
+      .maybeSingle();
+
+    if (!profile?.id) {
+      return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
+    }
+
+    const { data: userData } = await admin.auth.admin.getUserById(profile.id);
+
+    if (!userData.user?.email) {
+      return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
+    }
+
+    email = userData.user.email;
+  } catch {
+    return NextResponse.json({ error: GENERIC_ERROR }, { status: 500 });
+  }
+
   const successResponse = NextResponse.json({ ok: true });
 
   const supabase = createServerClient(
@@ -69,10 +71,7 @@ export async function POST(request: NextRequest) {
     }
   );
 
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+  const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
   if (signInError) {
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });

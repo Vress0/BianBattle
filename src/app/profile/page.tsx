@@ -58,7 +58,7 @@ export default async function ProfilePage() {
     losses: rawProfile?.losses ?? 0,
   };
 
-  const displayName = profile.nickname ?? user.email?.split("@")[0] ?? "玩家";
+  const displayName = profile.nickname ?? user.id.slice(0, 8);
   const winRate = calcWinRate(profile.wins, profile.losses);
   const debateRank = mmrToRank(profile.debate_mmr);
   const banterRank = mmrToRank(profile.banter_mmr);
@@ -74,8 +74,7 @@ export default async function ProfilePage() {
             </div>
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl font-bold text-white">{displayName}</h1>
-              <p className="text-sm text-slate-400">{user.email}</p>
-              <p className="mt-0.5 font-mono text-xs text-slate-600">UID: {user.id}</p>
+              <p className="mt-0.5 font-mono text-xs text-slate-600">UID: {user.id.slice(0, 12)}…</p>
               <ProfileEditForm userId={user.id} currentNickname={profile.nickname} />
             </div>
           </div>

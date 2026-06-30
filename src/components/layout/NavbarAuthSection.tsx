@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 interface NavbarAuthSectionProps {
-  user: { email?: string | null; id: string; nickname?: string | null } | null;
+  user: { id: string; nickname?: string | null } | null;
 }
 
 export default function NavbarAuthSection({ user }: NavbarAuthSectionProps) {
@@ -29,8 +29,7 @@ export default function NavbarAuthSection({ user }: NavbarAuthSectionProps) {
     );
   }
 
-  const displayName =
-    user.nickname ?? user.email?.split("@")[0] ?? "玩家";
+  const displayName = user.nickname ?? user.id.slice(0, 8);
 
   return (
     <div className="ml-2 flex items-center gap-2">

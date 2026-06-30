@@ -1,125 +1,127 @@
-import MatchModeCard from "@/components/room/MatchModeCard";
-import RoomCard from "@/components/room/RoomCard";
-import QueuePanel from "@/components/room/QueuePanel";
-import { MOCK_BANTER_ROOMS } from "@/lib/mockData";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import CreateMatchForm from "@/components/room/CreateMatchForm";
 
-const MODES = [
-  {
-    mode: "1v1" as const,
-    playerCount: 1,
-    description: "閃電嘴砲，一對一展現你的幽默與反應力。",
-  },
-  {
-    mode: "3v3" as const,
-    playerCount: 3,
-    description: "組隊嘴砲，和夥伴一起用犀利話語轟炸對手。",
-  },
-  {
-    mode: "5v5" as const,
-    playerCount: 5,
-    description: "大亂鬥嘴砲，最熱鬧的對話競技場。",
-  },
-];
+export default async function BanterRoomPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-const BANTER_FEATURES = [
-  {
-    icon: "⚡",
-    title: "嘴砲戰力",
-    desc: "根據發言的犀利度、創意度、幽默感即時評分",
-  },
-  {
-    icon: "🎭",
-    title: "幽默反擊",
-    desc: "用最妙的回答反將對手一軍，贏得更高分數",
-  },
-  {
-    icon: "🔥",
-    title: "連擊加成",
-    desc: "連續精彩發言可獲得連擊加成分數",
-  },
-];
+  // Fetch waiting/active banter matches
+  const { data: matches } = await supabase
+    .from("matches")
+    .select("id, title, topic, status, created_at")
+    .eq("mode", "banter")
+    .in("status", ["waiting", "active"])
+    .order("created_at", { ascending: false })
+    .limit(20);
 
-export default function BanterRoomPage() {
+  // Fetch player presence for each match
+  const matchIds = matches?.map((m) => m.id) ?? [];
+  const playersByMatch: Record<string, { pro: boolean; con: boolean }> = {};
+
+  if (matchIds.length > 0) {
+    const { data: players } = await supabase
+      .from("match_players")
+      .select("match_id, side")
+      .in("match_id", matchIds);
+
+    for (const p of players ?? []) {
+      if (!playersByMatch[p.match_id])
+        playersByMatch[p.match_id] = { pro: false, con: false };
+      if (p.side === "pro") playersByMatch[p.match_id].pro = true;
+      if (p.side === "con") playersByMatch[p.match_id].con = true;
+    }
+  }
+
   return (
     <main className="min-h-screen bg-slate-950">
-      <div className="mx-auto max-w-6xl px-4 py-12">
+      <div className="mx-auto max-w-5xl px-4 py-12">
         <div className="mb-2 text-xs font-semibold uppercase tracking-widest text-amber-400">
           BANTER ROOM
         </div>
         <h1 className="text-3xl font-bold text-white md:text-4xl">嘴砲房</h1>
         <p className="mt-2 text-slate-400">
-          輕鬆快速的對戰模式。用幽默、反應力與觀點打出你的風格，AI
-          評分犀利度與創意。
+          輕鬆快速對戰模式。用幽默、反應力與觀點打出你的風格，見招拆招。
         </p>
 
-        <section className="mt-10">
-          <h2 className="mb-4 text-lg font-semibold text-white">選擇模式</h2>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {MODES.map((m, i) => (
-              <MatchModeCard
-                key={m.mode}
-                mode={m.mode}
-                playerCount={m.playerCount}
-                description={m.description}
-                isSelected={i === 0}
-                accentColor="amber"
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className="mt-8">
-          <h2 className="mb-4 text-lg font-semibold text-white">嘴砲特色</h2>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {BANTER_FEATURES.map((f) => (
-              <div
-                key={f.title}
-                className="rounded-xl border border-amber-900/50 bg-amber-950/20 p-4"
-              >
-                <span className="text-2xl">{f.icon}</span>
-                <p className="mt-2 font-semibold text-amber-300">{f.title}</p>
-                <p className="mt-1 text-sm text-slate-400">{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
         <div className="mt-4 rounded-2xl border border-amber-800/50 bg-amber-950/20 p-4">
-          <p className="text-sm font-semibold text-amber-400">
-            ⚠️ 嘴砲安全規則
-          </p>
+          <p className="text-sm font-semibold text-amber-400">⚠️ 嘴砲安全規則</p>
           <p className="mt-1 text-sm text-slate-400">
             嘴砲可以幽默、可以犀利，但
             <span className="font-medium text-white">
               不能人身攻擊、歧視、霸凌或惡意羞辱
             </span>
-            。AI 裁判將自動偵測違規發言，違規者將被扣分並可能被封禁。
+            。違規者將被封禁。
           </p>
         </div>
 
-        <div className="mt-10 grid gap-8 lg:grid-cols-3">
-          <section className="lg:col-span-2">
-            <h2 className="mb-4 text-lg font-semibold text-white">
-              進行中的嘴砲房
-            </h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {MOCK_BANTER_ROOMS.map((room) => (
-                <RoomCard key={room.id} room={room} />
-              ))}
-            </div>
-          </section>
-
-          <aside>
-            <h2 className="mb-4 text-lg font-semibold text-white">快速嘴砲</h2>
-            <QueuePanel
-              type="banter"
-              mode="1v1"
-              isRanked={false}
-              waitingCount={28}
-              estimatedSeconds={30}
-            />
-          </aside>
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
+          <h2 className="text-lg font-semibold text-white">
+            等待中的嘴砲房
+            {matches && matches.length > 0 && (
+              <span className="ml-2 text-sm font-normal text-slate-500">
+                ({matches.length})
+              </span>
+            )}
+          </h2>
+          <CreateMatchForm mode="banter" currentUserId={user?.id ?? null} />
         </div>
+
+        {matches && matches.length > 0 ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {matches.map((match) => {
+              const slots = playersByMatch[match.id] ?? { pro: false, con: false };
+              const filled = (slots.pro ? 1 : 0) + (slots.con ? 1 : 0);
+              const isActive = match.status === "active";
+
+              return (
+                <Link
+                  key={match.id}
+                  href={`/matches/${match.id}`}
+                  className="group rounded-xl border border-slate-800 bg-slate-900 p-4 transition-colors hover:border-amber-700/60 hover:bg-slate-800/60"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-white group-hover:text-amber-300 line-clamp-1">
+                      {match.title}
+                    </p>
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        isActive
+                          ? "bg-green-900/50 text-green-400"
+                          : "bg-yellow-900/50 text-yellow-400"
+                      }`}
+                    >
+                      {isActive ? "對戰中" : "等待對手"}
+                    </span>
+                  </div>
+                  {match.topic && (
+                    <p className="mt-1 line-clamp-1 text-sm text-slate-400">
+                      {match.topic}
+                    </p>
+                  )}
+                  <div className="mt-3 flex items-center gap-3 text-xs text-slate-500">
+                    <span>玩家 {filled}/2</span>
+                    <span>·</span>
+                    <span>1v1</span>
+                    {filled === 2 && !isActive && (
+                      <>
+                        <span>·</span>
+                        <span className="text-yellow-500">已滿</span>
+                      </>
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-10 rounded-xl border border-dashed border-slate-700 py-14 text-center">
+            <p className="text-slate-500">目前沒有進行中的嘴砲房</p>
+            <p className="mt-1 text-sm text-slate-600">成為第一個建立嘴砲房的人！</p>
+          </div>
+        )}
       </div>
     </main>
   );

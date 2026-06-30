@@ -92,3 +92,38 @@ export interface RecentMatch {
   date: string;
   opponent: string;
 }
+
+// --- Supabase DB row types ---
+
+export interface DbMatch {
+  id: string;
+  title: string;
+  mode: string;
+  format: string;
+  status: string;
+  topic: string | null;
+  created_by: string | null;
+  winner_side: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbMatchPlayer {
+  id: string;
+  match_id: string;
+  user_id: string;
+  side: string;
+  joined_at: string;
+  nickname: string | null;
+}
+
+export interface DbMatchMessage {
+  id: string;
+  match_id: string;
+  user_id: string;
+  side: string;
+  content: string;
+  round: number;
+  created_at: string;
+  nickname: string | null;
+}

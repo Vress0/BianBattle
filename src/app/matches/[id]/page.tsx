@@ -1,8 +1,6 @@
-import { MOCK_MATCH } from "@/lib/mockData";
-import MatchHeader from "@/components/match/MatchHeader";
-import TeamPanel from "@/components/match/TeamPanel";
-import ChatPanel from "@/components/match/ChatPanel";
-import JudgePanel from "@/components/match/JudgePanel";
+import { notFound } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import MatchRoom from "./MatchRoom";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -10,32 +8,90 @@ interface PageProps {
 
 export default async function MatchPage({ params }: PageProps) {
   const { id } = await params;
-  const match = { ...MOCK_MATCH, id };
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Fetch match
+  const { data: match } = await supabase
+    .from("matches")
+    .select("id, title, mode, format, status, topic, created_by, winner_side, created_at, updated_at")
+    .eq("id", id)
+    .single();
+
+  if (!match) notFound();
+
+  // Fetch players
+  const { data: rawPlayers } = await supabase
+    .from("match_players")
+    .select("id, match_id, user_id, side, joined_at")
+    .eq("match_id", id);
+
+  // Fetch messages ordered by time
+  const { data: rawMessages } = await supabase
+    .from("match_messages")
+    .select("id, match_id, user_id, side, content, round, created_at")
+    .eq("match_id", id)
+    .order("created_at", { ascending: true });
+
+  // Resolve profiles for all involved users in a single query
+  const playerUserIds = rawPlayers?.map((p) => p.user_id) ?? [];
+  const messageUserIds = rawMessages?.map((m) => m.user_id) ?? [];
+  const allUserIds = [...new Set([...playerUserIds, ...messageUserIds])];
+
+  const profileMap: Record<string, string | null> = {};
+  if (allUserIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, nickname")
+      .in("id", allUserIds);
+    for (const p of profiles ?? []) {
+      profileMap[p.id] = p.nickname ?? null;
+    }
+  }
+
+  const proPlayer =
+    rawPlayers?.find((p) => p.side === "pro") ?? null;
+  const conPlayer =
+    rawPlayers?.find((p) => p.side === "con") ?? null;
+
+  const messages = (rawMessages ?? []).map((m) => ({
+    id: m.id,
+    match_id: m.match_id,
+    user_id: m.user_id,
+    side: m.side,
+    content: m.content,
+    round: m.round,
+    created_at: m.created_at,
+    nickname: profileMap[m.user_id] ?? null,
+  }));
 
   return (
     <main className="min-h-screen bg-slate-950">
-      <div className="mx-auto max-w-6xl px-4 py-8">
-        <MatchHeader match={match} />
-
-        <div className="mt-6 grid gap-4 lg:grid-cols-4">
-          <TeamPanel side="pro" players={match.proTeam} score={match.scores.pro} />
-
-          <div className="flex flex-col gap-4 lg:col-span-2">
-            <ChatPanel
-              messages={match.messages}
-              currentRound={match.currentRound}
-            />
-          </div>
-
-          <TeamPanel side="con" players={match.conTeam} score={match.scores.con} />
-        </div>
-
-        <div className="mt-6">
-          <JudgePanel
-            comment={match.aiJudgeComment}
-            round={match.currentRound}
-          />
-        </div>
+      <div className="mx-auto max-w-5xl px-4 py-8">
+        <MatchRoom
+          match={{
+            id: match.id,
+            title: match.title,
+            mode: match.mode,
+            status: match.status,
+            topic: match.topic,
+          }}
+          proPlayer={
+            proPlayer
+              ? { user_id: proPlayer.user_id, nickname: profileMap[proPlayer.user_id] ?? null }
+              : null
+          }
+          conPlayer={
+            conPlayer
+              ? { user_id: conPlayer.user_id, nickname: profileMap[conPlayer.user_id] ?? null }
+              : null
+          }
+          messages={messages}
+          currentUserId={user?.id ?? null}
+        />
       </div>
     </main>
   );
