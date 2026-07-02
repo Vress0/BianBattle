@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserSafe } from "@/lib/auth/get-current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isInGracePeriod, AFK_FORFEIT_SECONDS } from "@/lib/match-rules";
 
@@ -10,9 +11,7 @@ export async function POST(
   const { id: matchId } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUserSafe(supabase);
 
   if (!user) {
     return NextResponse.json({ error: "未登入" }, { status: 401 });
@@ -43,6 +42,10 @@ export async function POST(
   // Waiting: free the slot
   if (match.status === "waiting") {
     await admin.from("match_players").delete().eq("id", player.id);
+    await admin.from("user_statuses").upsert(
+      { user_id: user.id, status: "online", current_match_id: null, current_mode: null, last_seen_at: now, updated_at: now },
+      { onConflict: "user_id" }
+    );
     return NextResponse.json({ ok: true, redirectTo });
   }
 
@@ -73,6 +76,10 @@ export async function POST(
       await admin.from("match_typing_status").delete().eq("match_id", matchId);
     }
 
+    await admin.from("user_statuses").upsert(
+      { user_id: user.id, status: "online", current_match_id: null, current_mode: null, last_seen_at: now, updated_at: now },
+      { onConflict: "user_id" }
+    );
     return NextResponse.json({ ok: true, redirectTo });
   }
 
@@ -92,6 +99,12 @@ export async function POST(
     .update({ is_typing: false, last_typed_at: now })
     .eq("match_id", matchId)
     .eq("user_id", user.id);
+
+  // Status will appear offline after 90s with no heartbeat — explicit clear for immediate UX
+  await admin.from("user_statuses").upsert(
+    { user_id: user.id, status: "online", current_match_id: null, current_mode: null, last_seen_at: now, updated_at: now },
+    { onConflict: "user_id" }
+  );
 
   return NextResponse.json({ ok: true, redirectTo });
 }

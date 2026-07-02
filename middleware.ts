@@ -25,8 +25,14 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session — do not remove this
-  await supabase.auth.getUser();
+  // Refresh session — do not remove this.
+  // Wrapped in try-catch so that stale/reused refresh tokens don't crash the middleware.
+  try {
+    await supabase.auth.getUser();
+  } catch {
+    // Session refresh failed (e.g. "Invalid Refresh Token: Already Used").
+    // Treat as unauthenticated and let the request through.
+  }
 
   return supabaseResponse;
 }

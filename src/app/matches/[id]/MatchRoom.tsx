@@ -4,13 +4,30 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import type { DbMatch, DbMatchPlayer, DbMatchMessage, DbMatchTypingStatus } from "@/types";
+import type { DbMatch, DbMatchMessage, DbMatchTypingStatus } from "@/types";
 import TypingIndicator from "@/components/match/TypingIndicator";
 import SpeechInputButton from "@/components/match/SpeechInputButton";
+import PlayerInfoModal from "@/components/match/PlayerInfoModal";
+import PlayerBattleCard, { type PlayerBattleProfile } from "@/components/match/PlayerBattleCard";
+import { useUserStatusRealtime, type StatusMap } from "@/hooks/useUserStatusRealtime";
 import { GRACE_PERIOD_SECONDS } from "@/lib/match-rules";
 import { formatShortTime } from "@/lib/match-display";
+import type { UserMatchResultKey } from "@/lib/match-display";
 
 // ─── Prop types ──────────────────────────────────────────────────────────────
+
+interface PlayerInfo {
+  user_id: string;
+  nickname: string | null;
+  disconnected_at: string | null;
+  forfeit_deadline_at: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  wins: number;
+  losses: number;
+  debate_mmr: number;
+  banter_mmr: number;
+}
 
 interface MatchRoomProps {
   match: Pick<
@@ -18,10 +35,30 @@ interface MatchRoomProps {
     | "id" | "title" | "mode" | "status" | "topic" | "pro_position" | "con_position"
     | "started_at" | "ended_at" | "ended_reason" | "winner_side" | "is_rated"
   >;
-  proPlayer: Pick<DbMatchPlayer, "user_id" | "nickname" | "disconnected_at" | "forfeit_deadline_at"> | null;
-  conPlayer: Pick<DbMatchPlayer, "user_id" | "nickname" | "disconnected_at" | "forfeit_deadline_at"> | null;
+  proPlayer: PlayerInfo | null;
+  conPlayer: PlayerInfo | null;
+  proRecentResults: UserMatchResultKey[];
+  conRecentResults: UserMatchResultKey[];
+  initialStatuses: StatusMap;
   messages: Pick<DbMatchMessage, "id" | "user_id" | "side" | "content" | "round" | "created_at" | "nickname">[];
   currentUserId: string | null;
+}
+
+// ─── Module-level helpers ─────────────────────────────────────────────────────
+
+async function postStatusHeartbeat(
+  status: "online" | "in_match",
+  matchId: string | null = null
+) {
+  try {
+    await fetch("/api/status/heartbeat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, matchId }),
+    });
+  } catch {
+    // silently ignore
+  }
 }
 
 // ─── Constants & helpers ──────────────────────────────────────────────────────
@@ -43,7 +80,7 @@ const TIMEOUT_CHECK_MS = 10000;
 
 const fmtTime = formatShortTime;
 
-function playerName(p: Pick<DbMatchPlayer, "user_id" | "nickname"> | null): string {
+function playerName(p: { user_id: string; nickname: string | null } | null): string {
   if (!p) return "（空缺）";
   return p.nickname ?? p.user_id.slice(0, 8);
 }
@@ -78,6 +115,9 @@ export default function MatchRoom({
   match,
   proPlayer,
   conPlayer,
+  proRecentResults,
+  conRecentResults,
+  initialStatuses,
   messages,
   currentUserId,
 }: MatchRoomProps) {
@@ -105,6 +145,9 @@ export default function MatchRoom({
   // Copy-link button — only touches navigator.clipboard after mount (hydration-safe)
   const [mounted, setMounted] = useState(false);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+
+  // Player info modal
+  const [playerInfoModal, setPlayerInfoModal] = useState<{ userId: string; side: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -135,6 +178,37 @@ export default function MatchRoom({
 
   const modeLabel = match.mode === "debate" ? "辯論" : "嘴砲";
   const modeHref = match.mode === "debate" ? "/rooms/debate" : "/rooms/banter";
+
+  // Live status for both players
+  const playerIds = [proPlayer?.user_id, conPlayer?.user_id].filter(Boolean) as string[];
+  const statusMap = useUserStatusRealtime(playerIds, initialStatuses);
+
+  // Profiles for PlayerBattleCard
+  const proProfile: PlayerBattleProfile | null = proPlayer
+    ? {
+        userId: proPlayer.user_id,
+        nickname: proPlayer.nickname,
+        avatar_url: proPlayer.avatar_url,
+        bio: proPlayer.bio,
+        wins: proPlayer.wins,
+        losses: proPlayer.losses,
+        debate_mmr: proPlayer.debate_mmr,
+        banter_mmr: proPlayer.banter_mmr,
+      }
+    : null;
+
+  const conProfile: PlayerBattleProfile | null = conPlayer
+    ? {
+        userId: conPlayer.user_id,
+        nickname: conPlayer.nickname,
+        avatar_url: conPlayer.avatar_url,
+        bio: conPlayer.bio,
+        wins: conPlayer.wins,
+        losses: conPlayer.losses,
+        debate_mmr: conPlayer.debate_mmr,
+        banter_mmr: conPlayer.banter_mmr,
+      }
+    : null;
 
   // ─── Speech helpers ─────────────────────────────────────────────────────────
 
@@ -266,6 +340,39 @@ export default function MatchRoom({
     return () => clearInterval(id);
   }, [isActive, match.id, router]);
 
+  // Public status heartbeat — in_match while participant, online when match ends
+  useEffect(() => {
+    if (!isParticipant || !currentUserId) return;
+
+    // Match ended — revert to online and stop heartbeat
+    if (isEnded) {
+      postStatusHeartbeat("online").catch(() => {});
+      return;
+    }
+
+    postStatusHeartbeat("in_match", match.id).catch(() => {});
+    const id = setInterval(() => postStatusHeartbeat("in_match", match.id), 30_000);
+
+    function handleVisibility() {
+      if (document.visibilityState === "visible") {
+        postStatusHeartbeat("in_match", match.id).catch(() => {});
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      // Fire-and-forget online signal when leaving the page
+      fetch("/api/status/heartbeat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "online", matchId: null }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+  }, [isParticipant, currentUserId, isEnded, match.id]);
+
   // ─── Handlers ───────────────────────────────────────────────────────────────
 
   function handleContentChange(value: string) {
@@ -300,6 +407,8 @@ export default function MatchRoom({
     if (joinErr) {
       setError(joinErr.code === "23505" ? "此位置已被佔用，請選擇另一方。" : "加入失敗，請稍後再試。");
     } else {
+      // Immediately mark in_match before router.refresh() propagates
+      postStatusHeartbeat("in_match", match.id).catch(() => {});
       router.refresh();
     }
     setActionLoading(false);
@@ -384,6 +493,15 @@ export default function MatchRoom({
 
   return (
     <div>
+      {/* Player info modal */}
+      {playerInfoModal && (
+        <PlayerInfoModal
+          userId={playerInfoModal.userId}
+          side={playerInfoModal.side}
+          viewerId={currentUserId}
+          onClose={() => setPlayerInfoModal(null)}
+        />
+      )}
       {/* Top nav row */}
       <div className="mb-4 flex items-center justify-between">
         {isParticipant ? (
@@ -530,6 +648,43 @@ export default function MatchRoom({
         </div>
       )}
 
+      {/* VS Player Info Section */}
+      <div className="mt-4 flex flex-col items-stretch gap-3 md:flex-row md:items-start">
+        <div className="min-w-0 flex-1">
+          <PlayerBattleCard
+            side="pro"
+            mode={match.mode as "debate" | "banter"}
+            player={proProfile}
+            status={proPlayer ? statusMap[proPlayer.user_id] : undefined}
+            recentResults={proRecentResults}
+            isCurrentUser={currentSide === "pro"}
+            onViewProfile={
+              proPlayer
+                ? () => setPlayerInfoModal({ userId: proPlayer.user_id, side: "pro" })
+                : undefined
+            }
+          />
+        </div>
+        <div className="flex shrink-0 items-center justify-center py-2 md:py-8">
+          <span className="text-2xl font-black text-slate-600">VS</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <PlayerBattleCard
+            side="con"
+            mode={match.mode as "debate" | "banter"}
+            player={conProfile}
+            status={conPlayer ? statusMap[conPlayer.user_id] : undefined}
+            recentResults={conRecentResults}
+            isCurrentUser={currentSide === "con"}
+            onViewProfile={
+              conPlayer
+                ? () => setPlayerInfoModal({ userId: conPlayer.user_id, side: "con" })
+                : undefined
+            }
+          />
+        </div>
+      </div>
+
       {/* Main 3-column layout */}
       <div className="mt-4 grid gap-4 lg:grid-cols-4">
         {/* Pro side */}
@@ -543,6 +698,12 @@ export default function MatchRoom({
               {proPlayer.disconnected_at && !isEnded && (
                 <p className="mt-1 text-xs text-orange-400">已離線</p>
               )}
+              <button
+                onClick={() => setPlayerInfoModal({ userId: proPlayer.user_id, side: "pro" })}
+                className="mt-1 text-xs text-slate-500 transition-colors hover:text-indigo-400"
+              >
+                查看資訊
+              </button>
             </>
           ) : (
             <div className="space-y-2">
@@ -668,6 +829,12 @@ export default function MatchRoom({
               {conPlayer.disconnected_at && !isEnded && (
                 <p className="mt-1 text-xs text-orange-400">已離線</p>
               )}
+              <button
+                onClick={() => setPlayerInfoModal({ userId: conPlayer.user_id, side: "con" })}
+                className="mt-1 text-xs text-slate-500 transition-colors hover:text-slate-400"
+              >
+                查看資訊
+              </button>
             </>
           ) : (
             <div className="space-y-2">

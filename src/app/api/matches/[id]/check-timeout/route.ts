@@ -101,5 +101,18 @@ export async function POST(
   }
 
   await admin.from("match_typing_status").delete().eq("match_id", matchId);
+
+  // Clear status for both players — match ended by timeout
+  const allPlayerIds = [
+    forfeiter.user_id,
+    ...(winnerPlayer ? [winnerPlayer.user_id] : []),
+  ];
+  for (const uid of allPlayerIds) {
+    await admin.from("user_statuses").upsert(
+      { user_id: uid, status: "online", current_match_id: null, current_mode: null, last_seen_at: nowIso, updated_at: nowIso },
+      { onConflict: "user_id" }
+    );
+  }
+
   return NextResponse.json({ ok: true, changed: true });
 }

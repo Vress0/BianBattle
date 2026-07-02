@@ -60,6 +60,60 @@ export const RANK_MMR_THRESHOLDS: Record<RankTier, number> = {
   grandmaster: 3000,
 };
 
+// ─── Unified rank system (debate + banter, thresholds: 0/800/1000/1200/1400/1600/1800) ───
+
+export const UNIFIED_RANK_TIERS = [
+  "bronze",
+  "silver",
+  "gold",
+  "platinum",
+  "diamond",
+  "star",
+  "master",
+] as const;
+
+export type UnifiedRankTier = (typeof UNIFIED_RANK_TIERS)[number];
+
+export const UNIFIED_MMR_THRESHOLDS: Record<UnifiedRankTier, number> = {
+  bronze: 0,
+  silver: 800,
+  gold: 1000,
+  platinum: 1200,
+  diamond: 1400,
+  star: 1600,
+  master: 1800,
+};
+
+export const UNIFIED_RANK_ICONS: Record<UnifiedRankTier, string> = {
+  bronze: "🥉",
+  silver: "🥈",
+  gold: "🥇",
+  platinum: "💎",
+  diamond: "🔮",
+  star: "🌟",
+  master: "👑",
+};
+
+export const UNIFIED_RANK_TEXT_COLORS: Record<UnifiedRankTier, string> = {
+  bronze: "text-orange-400",
+  silver: "text-slate-300",
+  gold: "text-yellow-400",
+  platinum: "text-cyan-300",
+  diamond: "text-purple-400",
+  star: "text-blue-300",
+  master: "text-red-400",
+};
+
+export const UNIFIED_RANK_BORDER_COLORS: Record<UnifiedRankTier, string> = {
+  bronze: "border-orange-700/60",
+  silver: "border-slate-500/60",
+  gold: "border-yellow-700/60",
+  platinum: "border-cyan-700/60",
+  diamond: "border-purple-700/60",
+  star: "border-blue-700/60",
+  master: "border-red-700/60",
+};
+
 export const MATCH_MODES = ["1v1", "3v3", "5v5"] as const;
 
 export const PRESET_TOPICS: string[] = [

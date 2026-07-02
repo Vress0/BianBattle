@@ -1,20 +1,22 @@
 import Link from "next/link";
-import {
-  RANK_TIERS,
-  RANK_LABELS,
-  RANK_ICONS,
-  RANK_TEXT_COLORS,
-  RANK_BORDER_COLORS,
-  RANK_MMR_THRESHOLDS,
-} from "@/lib/constants";
 import { MOCK_CURRENT_PLAYER } from "@/lib/mockData";
-import { rankProgressPercent, mmrToNextRank } from "@/lib/rank";
+import {
+  getDebateRankFromMmr,
+  getBanterRankFromMmr,
+  unifiedRankProgressPercent,
+  unifiedMmrToNextRank,
+  ALL_DEBATE_RANKS,
+  ALL_BANTER_RANKS,
+} from "@/lib/rank";
+import type { DebateRankInfo, BanterRankInfo } from "@/lib/rank";
 
 export default function RankedPage() {
-  const debateProgress = rankProgressPercent(MOCK_CURRENT_PLAYER.debateMMR);
-  const banterProgress = rankProgressPercent(MOCK_CURRENT_PLAYER.banterMMR);
-  const debateToNext = mmrToNextRank(MOCK_CURRENT_PLAYER.debateMMR);
-  const banterToNext = mmrToNextRank(MOCK_CURRENT_PLAYER.banterMMR);
+  const debateRankInfo = getDebateRankFromMmr(MOCK_CURRENT_PLAYER.debateMMR);
+  const banterRankInfo = getBanterRankFromMmr(MOCK_CURRENT_PLAYER.banterMMR);
+  const debateProgress = unifiedRankProgressPercent(MOCK_CURRENT_PLAYER.debateMMR);
+  const banterProgress = unifiedRankProgressPercent(MOCK_CURRENT_PLAYER.banterMMR);
+  const debateToNext = unifiedMmrToNextRank(MOCK_CURRENT_PLAYER.debateMMR);
+  const banterToNext = unifiedMmrToNextRank(MOCK_CURRENT_PLAYER.banterMMR);
 
   return (
     <main className="min-h-screen bg-slate-950">
@@ -27,31 +29,46 @@ export default function RankedPage() {
           辯論與嘴砲雙軌排位系統，從青銅爬到王者，用實力說話。
         </p>
 
+        {/* Debate rank tiers */}
         <section className="mt-10">
-          <h2 className="mb-5 text-lg font-semibold text-white">段位系統</h2>
+          <h2 className="mb-4 text-lg font-semibold text-white">⚖️ 辯論段位系統</h2>
           <div className="grid grid-cols-4 gap-3 sm:grid-cols-7">
-            {RANK_TIERS.map((tier) => (
+            {ALL_DEBATE_RANKS.map((r) => (
               <div
-                key={tier}
-                className={`rounded-xl border p-3 text-center ${RANK_BORDER_COLORS[tier]} bg-slate-900`}
+                key={r.tier}
+                className={`rounded-xl border p-3 text-center ${r.borderClass} bg-slate-900`}
               >
-                <div className="text-2xl">{RANK_ICONS[tier]}</div>
-                <p className={`mt-1 text-xs font-bold ${RANK_TEXT_COLORS[tier]}`}>
-                  {RANK_LABELS[tier]}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-600">
-                  {RANK_MMR_THRESHOLDS[tier]}+
-                </p>
+                <div className="text-2xl">{r.icon}</div>
+                <p className={`mt-1 text-xs font-bold ${r.textClass}`}>{r.title}</p>
+                <p className="mt-0.5 text-xs text-slate-600">{r.minMmr}+</p>
               </div>
             ))}
           </div>
         </section>
 
+        {/* Banter rank tiers */}
+        <section className="mt-8">
+          <h2 className="mb-4 text-lg font-semibold text-white">🔥 嘴砲段位系統</h2>
+          <div className="grid grid-cols-4 gap-3 sm:grid-cols-7">
+            {ALL_BANTER_RANKS.map((r) => (
+              <div
+                key={r.tier}
+                className={`rounded-xl border p-3 text-center ${r.borderClass} bg-slate-900`}
+              >
+                <div className="text-2xl">{r.icon}</div>
+                <p className={`mt-1 text-xs font-bold ${r.textClass}`}>{r.title}</p>
+                <p className="mt-0.5 text-xs text-slate-600">{r.minMmr}+</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Current rank cards */}
         <section className="mt-10 grid gap-5 md:grid-cols-2">
           <RankCard
             title="辯論排位"
             icon="⚖️"
-            rank={MOCK_CURRENT_PLAYER.debateRank}
+            rankInfo={debateRankInfo}
             mmr={MOCK_CURRENT_PLAYER.debateMMR}
             progress={debateProgress}
             toNext={debateToNext}
@@ -60,7 +77,7 @@ export default function RankedPage() {
           <RankCard
             title="嘴砲排位"
             icon="🔥"
-            rank={MOCK_CURRENT_PLAYER.banterRank}
+            rankInfo={banterRankInfo}
             mmr={MOCK_CURRENT_PLAYER.banterMMR}
             progress={banterProgress}
             toNext={banterToNext}
@@ -112,33 +129,17 @@ export default function RankedPage() {
 interface RankCardProps {
   title: string;
   icon: string;
-  rank: string;
+  rankInfo: DebateRankInfo | BanterRankInfo;
   mmr: number;
   progress: number;
   toNext: number;
   color: "indigo" | "amber";
 }
 
-function RankCard({
-  title,
-  icon,
-  rank,
-  mmr,
-  progress,
-  toNext,
-  color,
-}: RankCardProps) {
-  const borderColor =
-    color === "indigo" ? "border-indigo-800/60" : "border-amber-800/60";
-  const accentText =
-    color === "indigo" ? "text-indigo-400" : "text-amber-400";
-  const progressBar =
-    color === "indigo" ? "bg-indigo-500" : "bg-amber-500";
-
-  const rankLabel =
-    RANK_LABELS[rank as keyof typeof RANK_LABELS] ?? rank;
-  const rankIcon =
-    RANK_ICONS[rank as keyof typeof RANK_ICONS] ?? "🎯";
+function RankCard({ title, icon, rankInfo, mmr, progress, toNext, color }: RankCardProps) {
+  const borderColor = color === "indigo" ? "border-indigo-800/60" : "border-amber-800/60";
+  const accentText = color === "indigo" ? "text-indigo-400" : "text-amber-400";
+  const progressBar = color === "indigo" ? "bg-indigo-500" : "bg-amber-500";
 
   return (
     <div className={`rounded-2xl border ${borderColor} bg-slate-900 p-6`}>
@@ -147,17 +148,24 @@ function RankCard({
         <p className={`font-semibold ${accentText}`}>{title}</p>
       </div>
       <div className="mt-4 flex items-center gap-3">
-        <span className="text-4xl">{rankIcon}</span>
+        <span className="text-4xl">{rankInfo.icon}</span>
         <div>
-          <p className="text-xl font-bold text-white">{rankLabel}</p>
+          <p className={`text-xl font-bold ${rankInfo.textClass}`}>{rankInfo.title}</p>
           <p className="text-sm text-slate-400">{mmr.toLocaleString()} MMR</p>
         </div>
       </div>
+      {rankInfo.mode === "banter" && (
+        <p className="mt-1 text-xs text-slate-500">大招：{rankInfo.ultimate}</p>
+      )}
+      <p className="mt-1 text-xs text-slate-600">{rankInfo.description}</p>
       <div className="mt-4">
         <div className="mb-1 flex justify-between text-xs text-slate-500">
           <span>段位進度</span>
-          {toNext > 0 && <span>距下段位 {toNext} MMR</span>}
-          {toNext === 0 && <span>已達最高段位</span>}
+          {toNext > 0 ? (
+            <span>距下段位 {toNext} MMR</span>
+          ) : (
+            <span>已達最高段位</span>
+          )}
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-slate-800">
           <div

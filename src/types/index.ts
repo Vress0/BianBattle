@@ -93,6 +93,47 @@ export interface RecentMatch {
   opponent: string;
 }
 
+// --- History / Bookmark / Note types ---
+
+export type UserMatchResultKey = "win" | "loss" | "unrated" | "cancelled" | "active";
+
+export interface HistoryMatchRow {
+  id: string;
+  title: string;
+  mode: string;
+  status: string;
+  topic: string | null;
+  created_at: string;
+  started_at: string | null;
+  ended_at: string | null;
+  ended_reason: string | null;
+  winner_side: string | null;
+  is_rated: boolean;
+  userSide: string;
+  opponentId: string | null;
+  opponentName: string;
+  opponentAvatarUrl: string | null;
+  resultKey: UserMatchResultKey;
+  isBookmarked: boolean;
+  noteContent: string | null;
+}
+
+export interface DbMatchBookmark {
+  id: string;
+  match_id: string;
+  user_id: string;
+  created_at: string;
+}
+
+export interface DbMatchNote {
+  id: string;
+  match_id: string;
+  user_id: string;
+  note: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- Supabase DB row types ---
 
 export type MatchEndedReason =

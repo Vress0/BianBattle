@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserSafe } from "@/lib/auth/get-current-user";
 import NavbarAuthSection from "./NavbarAuthSection";
+import NavbarMessagesLink from "@/components/messages/NavbarMessagesLink";
+import NavbarNotificationsLink from "@/components/notifications/NavbarNotificationsLink";
 
 const NAV_LINKS = [
   { href: "/", label: "首頁" },
@@ -12,9 +15,7 @@ const NAV_LINKS = [
 
 export default async function Navbar() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUserSafe(supabase);
 
   let nickname: string | null = null;
   if (user) {
@@ -47,6 +48,22 @@ export default async function Navbar() {
                 {link.label}
               </Link>
             ))}
+            <Link
+              href="/users/search"
+              className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+            >
+              搜尋玩家
+            </Link>
+            {user && (
+              <Link
+                href="/friends"
+                className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+              >
+                好友
+              </Link>
+            )}
+            {user && <NavbarMessagesLink />}
+            {user && <NavbarNotificationsLink />}
           </nav>
           <NavbarAuthSection
             user={user ? { id: user.id, nickname } : null}

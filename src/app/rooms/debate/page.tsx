@@ -1,12 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserSafe } from "@/lib/auth/get-current-user";
 import CreateMatchForm from "@/components/room/CreateMatchForm";
 import RoomListClient, { type RoomEntry } from "@/components/room/RoomListClient";
 
 export default async function DebateRoomPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUserSafe(supabase);
 
   const { data: matches, error: matchesError } = await supabase
     .from("matches")
@@ -16,7 +15,13 @@ export default async function DebateRoomPage() {
     .limit(50);
 
   const matchIds = matches?.map((m) => m.id) ?? [];
-  const playersByMatch: Record<string, { pro: string | null; con: string | null }> = {};
+
+  interface SlotInfo {
+    name: string | null;
+    avatarUrl: string | null;
+    userId: string | null;
+  }
+  const playersByMatch: Record<string, { pro: SlotInfo; con: SlotInfo }> = {};
 
   if (matchIds.length > 0) {
     const { data: players } = await supabase
@@ -24,37 +29,57 @@ export default async function DebateRoomPage() {
       .select("match_id, side, user_id")
       .in("match_id", matchIds);
 
-    const userIds = [...new Set((players ?? []).map((p) => p.user_id))];
-    const nicknameMap: Record<string, string | null> = {};
+    const userIds = [...new Set((players ?? []).map((p) => p.user_id as string))];
+    const profileMap: Record<string, { nickname: string | null; avatar_url: string | null }> = {};
     if (userIds.length > 0) {
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, nickname")
+        .select("id, nickname, avatar_url")
         .in("id", userIds);
-      for (const p of profiles ?? []) nicknameMap[p.id] = p.nickname ?? null;
+      for (const p of profiles ?? []) {
+        profileMap[p.id as string] = {
+          nickname: (p.nickname as string | null) ?? null,
+          avatar_url: (p.avatar_url as string | null) ?? null,
+        };
+      }
     }
 
+    const empty: SlotInfo = { name: null, avatarUrl: null, userId: null };
     for (const p of players ?? []) {
-      if (!playersByMatch[p.match_id]) playersByMatch[p.match_id] = { pro: null, con: null };
-      const name = nicknameMap[p.user_id] ?? p.user_id.slice(0, 8);
-      if (p.side === "pro") playersByMatch[p.match_id].pro = name;
-      if (p.side === "con") playersByMatch[p.match_id].con = name;
+      if (!playersByMatch[p.match_id as string]) {
+        playersByMatch[p.match_id as string] = { pro: { ...empty }, con: { ...empty } };
+      }
+      const prof = profileMap[p.user_id as string];
+      const slot: SlotInfo = {
+        name: prof?.nickname ?? (p.user_id as string).slice(0, 8),
+        avatarUrl: prof?.avatar_url ?? null,
+        userId: p.user_id as string,
+      };
+      if ((p.side as string) === "pro") playersByMatch[p.match_id as string].pro = slot;
+      if ((p.side as string) === "con") playersByMatch[p.match_id as string].con = slot;
     }
   }
 
   const rooms: RoomEntry[] = (matches ?? []).map((m) => {
-    const slots = playersByMatch[m.id] ?? { pro: null, con: null };
+    const slots = playersByMatch[m.id as string] ?? {
+      pro: { name: null, avatarUrl: null, userId: null },
+      con: { name: null, avatarUrl: null, userId: null },
+    };
     return {
-      id: m.id,
-      title: m.title,
-      topic: m.topic,
-      status: m.status,
-      winner_side: m.winner_side,
-      is_rated: m.is_rated,
-      created_at: m.created_at,
-      proNickname: slots.pro,
-      conNickname: slots.con,
-      filled: (slots.pro ? 1 : 0) + (slots.con ? 1 : 0),
+      id: m.id as string,
+      title: m.title as string,
+      topic: (m.topic as string | null) ?? null,
+      status: m.status as string,
+      winner_side: (m.winner_side as string | null) ?? null,
+      is_rated: m.is_rated as boolean,
+      created_at: m.created_at as string,
+      proNickname: slots.pro.name,
+      proAvatarUrl: slots.pro.avatarUrl,
+      proUserId: slots.pro.userId,
+      conNickname: slots.con.name,
+      conAvatarUrl: slots.con.avatarUrl,
+      conUserId: slots.con.userId,
+      filled: (slots.pro.name ? 1 : 0) + (slots.con.name ? 1 : 0),
     };
   });
 

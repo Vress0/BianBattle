@@ -1,15 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { calcWinRate } from "@/lib/utils";
+import Avatar from "@/components/ui/Avatar";
+import { getDebateRankFromMmr, getBanterRankFromMmr } from "@/lib/rank";
+import { getStatusIcon, getStatusBadgeClass } from "@/lib/status-display";
+import type { UserEffectiveStatus } from "@/lib/status-display";
+import { useUserStatusRealtime } from "@/hooks/useUserStatusRealtime";
+import type { StatusMap } from "@/hooks/useUserStatusRealtime";
 
 export interface LeaderboardProfile {
   id: string;
   nickname: string | null;
+  avatar_url: string | null;
   wins: number;
   losses: number;
   debate_mmr: number;
   banter_mmr: number;
+  effectiveStatus?: UserEffectiveStatus;
 }
 
 type TabKey = "wins" | "winRate" | "debateMmr" | "banterMmr";
@@ -42,6 +50,16 @@ function sortEntries(entries: LeaderboardProfile[], tab: TabKey): LeaderboardPro
 
 export default function LeaderboardTabs({ entries }: { entries: LeaderboardProfile[] }) {
   const [tab, setTab] = useState<TabKey>("wins");
+
+  const userIds = useMemo(() => entries.map((e) => e.id), [entries]);
+  const initialMap = useMemo<StatusMap>(
+    () =>
+      Object.fromEntries(
+        entries.map((e) => [e.id, (e.effectiveStatus ?? "offline") as UserEffectiveStatus])
+      ),
+    [entries]
+  );
+  const statusMap = useUserStatusRealtime(userIds, initialMap);
 
   const pool =
     tab === "winRate"
@@ -93,6 +111,9 @@ export default function LeaderboardTabs({ entries }: { entries: LeaderboardProfi
             const rank = i + 1;
             const name = entry.nickname ?? entry.id.slice(0, 8);
             const winRate = calcWinRate(entry.wins, entry.losses);
+            const debateRank = tab === "debateMmr" ? getDebateRankFromMmr(entry.debate_mmr) : null;
+            const banterRank = tab === "banterMmr" ? getBanterRankFromMmr(entry.banter_mmr) : null;
+            const liveStatus = statusMap[entry.id];
             return (
               <div
                 key={entry.id}
@@ -111,7 +132,26 @@ export default function LeaderboardTabs({ entries }: { entries: LeaderboardProfi
                 >
                   {rank <= 3 ? ["🥇", "🥈", "🥉"][rank - 1] : `#${rank}`}
                 </span>
-                <span className="truncate font-medium text-white">{name}</span>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <Avatar src={entry.avatar_url} name={name} size="sm" />
+                    <span className="truncate font-medium text-white">{name}</span>
+                    {liveStatus && liveStatus !== "offline" && (
+                      <span
+                        className={`shrink-0 text-xs ${getStatusBadgeClass(liveStatus)}`}
+                        title={liveStatus === "in_match" ? "對局中" : liveStatus === "idle" ? "閒置" : "在線"}
+                      >
+                        {getStatusIcon(liveStatus)}
+                      </span>
+                    )}
+                  </div>
+                  {debateRank && (
+                    <span className={`ml-8 text-xs ${debateRank.textClass}`}>{debateRank.fullName}</span>
+                  )}
+                  {banterRank && (
+                    <span className={`ml-8 text-xs ${banterRank.textClass}`}>{banterRank.fullName}</span>
+                  )}
+                </div>
                 <span className="text-right text-green-400">{entry.wins}</span>
                 <span className="text-right text-red-400">{entry.losses}</span>
                 <span className="text-right text-slate-300">{winRate}%</span>

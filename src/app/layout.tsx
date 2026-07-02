@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import StatusHeartbeat from "@/components/status/StatusHeartbeat";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -66,6 +67,7 @@ export default function RootLayout({
     >
       <body className="flex min-h-full flex-col bg-slate-950 text-white">
         <Navbar />
+        <StatusHeartbeat />
         {children}
         <Footer />
       </body>

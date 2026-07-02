@@ -1,3 +1,27 @@
+export const SIDE_LABELS: Record<string, string> = {
+  pro: "正方",
+  con: "反方",
+};
+
+export function getSideLabel(side: string): string {
+  return SIDE_LABELS[side] ?? side;
+}
+
+export type UserMatchResultKey = "win" | "loss" | "unrated" | "cancelled" | "active";
+
+export function getUserMatchResult(
+  status: string,
+  winnerSide: string | null,
+  isRated: boolean,
+  userSide: string | null
+): UserMatchResultKey {
+  if (status === "cancelled") return "cancelled";
+  if (status === "waiting" || status === "active") return "active";
+  if (!isRated || !winnerSide) return "unrated";
+  if (winnerSide === userSide) return "win";
+  return "loss";
+}
+
 export const MODE_LABELS: Record<string, string> = {
   debate: "辯論房",
   banter: "嘴砲房",
@@ -78,4 +102,57 @@ export function formatShortTime(iso: string | null | undefined): string {
   const t = toTaipei(iso);
   if (!t) return "--:--";
   return `${pad2(t.getUTCHours())}:${pad2(t.getUTCMinutes())}`;
+}
+
+// ─── Result symbol helpers ────────────────────────────────────────────────────
+
+export function getResultSymbol(result: UserMatchResultKey): string {
+  if (result === "win") return "○";
+  if (result === "loss") return "✕";
+  if (result === "active") return "…";
+  return "－";
+}
+
+export function getResultSymbolClass(result: UserMatchResultKey): string {
+  if (result === "win") return "text-green-400";
+  if (result === "loss") return "text-red-400";
+  if (result === "active") return "text-blue-400";
+  return "text-slate-500";
+}
+
+export function getResultBgClass(result: UserMatchResultKey): string {
+  if (result === "win") return "bg-green-900/40";
+  if (result === "loss") return "bg-red-900/40";
+  if (result === "active") return "bg-blue-900/40";
+  return "bg-slate-800";
+}
+
+export function getResultAriaLabel(result: UserMatchResultKey): string {
+  if (result === "win") return "勝利";
+  if (result === "loss") return "失敗";
+  if (result === "active") return "進行中";
+  if (result === "cancelled") return "取消";
+  return "不計分";
+}
+
+export interface RecentResultSummary {
+  wins: number;
+  losses: number;
+  unrated: number;
+  active: number;
+  total: number;
+}
+
+export function getRecentResultSummary(records: UserMatchResultKey[]): RecentResultSummary {
+  let wins = 0;
+  let losses = 0;
+  let unrated = 0;
+  let active = 0;
+  for (const r of records) {
+    if (r === "win") wins++;
+    else if (r === "loss") losses++;
+    else if (r === "unrated" || r === "cancelled") unrated++;
+    else if (r === "active") active++;
+  }
+  return { wins, losses, unrated, active, total: records.length };
 }

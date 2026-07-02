@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserSafe } from "@/lib/auth/get-current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isInGracePeriod, opposedSide } from "@/lib/match-rules";
 
@@ -10,9 +11,7 @@ export async function POST(
   const { id: matchId } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUserSafe(supabase);
 
   if (!user) {
     return NextResponse.json({ error: "未登入" }, { status: 401 });
@@ -69,6 +68,12 @@ export async function POST(
       .update({ disconnected_at: null, forfeit_deadline_at: null })
       .eq("match_id", matchId);
     await admin.from("match_typing_status").delete().eq("match_id", matchId);
+
+    // Clear status for surrendering player (both players had grace — cancel, not finish)
+    await admin.from("user_statuses").upsert(
+      { user_id: user.id, status: "online", current_match_id: null, current_mode: null, last_seen_at: now, updated_at: now },
+      { onConflict: "user_id" }
+    );
     return NextResponse.json({ ok: true, rated: false, reason: "grace_surrender" });
   }
 
@@ -125,5 +130,15 @@ export async function POST(
     .update({ disconnected_at: null, forfeit_deadline_at: null })
     .eq("match_id", matchId);
   await admin.from("match_typing_status").delete().eq("match_id", matchId);
+
+  // Clear status for both players — match is over
+  const allPlayerIds = [user.id, ...(opponentPlayer ? [opponentPlayer.user_id] : [])];
+  for (const uid of allPlayerIds) {
+    await admin.from("user_statuses").upsert(
+      { user_id: uid, status: "online", current_match_id: null, current_mode: null, last_seen_at: now, updated_at: now },
+      { onConflict: "user_id" }
+    );
+  }
+
   return NextResponse.json({ ok: true, rated: true, reason: "surrender" });
 }

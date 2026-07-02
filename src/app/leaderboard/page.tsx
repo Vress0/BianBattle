@@ -1,21 +1,38 @@
 import { createClient } from "@/lib/supabase/server";
 import LeaderboardTabs, { type LeaderboardProfile } from "@/app/leaderboard/LeaderboardTabs";
+import { getEffectiveUserStatus } from "@/lib/status-display";
+import type { UserStatusRow } from "@/lib/status-display";
 
 export default async function LeaderboardPage() {
   const supabase = await createClient();
 
   const { data: rawProfiles, error } = await supabase
     .from("profiles")
-    .select("id, nickname, wins, losses, debate_mmr, banter_mmr")
+    .select("id, nickname, avatar_url, wins, losses, debate_mmr, banter_mmr")
     .limit(200);
 
+  // Fetch statuses for all profiles (best-effort — table may not exist yet)
+  const userIds = (rawProfiles ?? []).map((p) => p.id as string);
+  const statusMap: Record<string, UserStatusRow> = {};
+  if (userIds.length > 0) {
+    const { data: statusRows } = await supabase
+      .from("user_statuses")
+      .select("user_id, status, current_match_id, current_mode, last_seen_at")
+      .in("user_id", userIds);
+    for (const row of statusRows ?? []) {
+      statusMap[row.user_id as string] = row as UserStatusRow;
+    }
+  }
+
   const entries: LeaderboardProfile[] = (rawProfiles ?? []).map((p) => ({
-    id: p.id,
-    nickname: p.nickname ?? null,
-    wins: p.wins ?? 0,
-    losses: p.losses ?? 0,
-    debate_mmr: p.debate_mmr ?? 1000,
-    banter_mmr: p.banter_mmr ?? 1000,
+    id: p.id as string,
+    nickname: (p.nickname as string | null) ?? null,
+    avatar_url: (p.avatar_url as string | null) ?? null,
+    wins: (p.wins as number) ?? 0,
+    losses: (p.losses as number) ?? 0,
+    debate_mmr: (p.debate_mmr as number) ?? 1000,
+    banter_mmr: (p.banter_mmr as number) ?? 1000,
+    effectiveStatus: getEffectiveUserStatus(statusMap[p.id as string] ?? null),
   }));
 
   return (

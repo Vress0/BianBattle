@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import Avatar from "@/components/ui/Avatar";
 import { STATUS_LABELS, winnerSideLabel, formatDateTime } from "@/lib/match-display";
+import { useUserStatusRealtime } from "@/hooks/useUserStatusRealtime";
+import { getStatusIcon, getStatusBadgeClass } from "@/lib/status-display";
 
 export interface RoomEntry {
   id: string;
@@ -13,7 +16,11 @@ export interface RoomEntry {
   is_rated: boolean;
   created_at: string;
   proNickname: string | null;
+  proAvatarUrl: string | null;
+  proUserId: string | null;
   conNickname: string | null;
+  conAvatarUrl: string | null;
+  conUserId: string | null;
   filled: number;
 }
 
@@ -34,7 +41,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 function statusGroupRank(status: string): number {
   if (status === "waiting") return 0;
   if (status === "active") return 1;
-  return 2; // finished | cancelled
+  return 2;
 }
 
 function matchesFilter(status: string, filter: FilterKey): boolean {
@@ -46,6 +53,16 @@ function matchesFilter(status: string, filter: FilterKey): boolean {
 
 export default function RoomListClient({ mode, rooms }: RoomListClientProps) {
   const [filter, setFilter] = useState<FilterKey>("all");
+
+  const allPlayerIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const r of rooms) {
+      if (r.proUserId) ids.push(r.proUserId);
+      if (r.conUserId) ids.push(r.conUserId);
+    }
+    return [...new Set(ids)];
+  }, [rooms]);
+  const statusMap = useUserStatusRealtime(allPlayerIds);
 
   const isDebate = mode === "debate";
   const accentBorder = isDebate ? "hover:border-indigo-700/60" : "hover:border-amber-700/60";
@@ -84,7 +101,11 @@ export default function RoomListClient({ mode, rooms }: RoomListClientProps) {
           {filtered.map((room) => {
             const isTerminal = room.status === "finished" || room.status === "cancelled";
             const resultText =
-              !room.is_rated || !room.winner_side ? "不計戰績" : winnerSideLabel(room.winner_side);
+              !room.is_rated || !room.winner_side
+                ? "不計戰績"
+                : winnerSideLabel(room.winner_side);
+            const proName = room.proNickname ?? "空缺";
+            const conName = room.conNickname ?? "空缺";
 
             return (
               <Link
@@ -109,9 +130,33 @@ export default function RoomListClient({ mode, rooms }: RoomListClientProps) {
                   </span>
                 </div>
 
-                <p className="mt-1 line-clamp-1 text-sm text-slate-400">
-                  正方：{room.proNickname ?? "空缺"} · 反方：{room.conNickname ?? "空缺"}
-                </p>
+                <div className="mt-2 flex items-center gap-3 text-sm text-slate-400">
+                  <div className="flex items-center gap-1.5">
+                    <Avatar src={room.proAvatarUrl} name={proName} size="xs" />
+                    <span>{proName}</span>
+                    {room.proUserId && statusMap[room.proUserId] && statusMap[room.proUserId] !== "offline" && (
+                      <span
+                        className={`text-xs ${getStatusBadgeClass(statusMap[room.proUserId]!)}`}
+                        title={statusMap[room.proUserId] === "in_match" ? "對局中" : "在線"}
+                      >
+                        {getStatusIcon(statusMap[room.proUserId]!)}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-slate-600">vs</span>
+                  <div className="flex items-center gap-1.5">
+                    <Avatar src={room.conAvatarUrl} name={conName} size="xs" />
+                    <span>{conName}</span>
+                    {room.conUserId && statusMap[room.conUserId] && statusMap[room.conUserId] !== "offline" && (
+                      <span
+                        className={`text-xs ${getStatusBadgeClass(statusMap[room.conUserId]!)}`}
+                        title={statusMap[room.conUserId] === "in_match" ? "對局中" : "在線"}
+                      >
+                        {getStatusIcon(statusMap[room.conUserId]!)}
+                      </span>
+                    )}
+                  </div>
+                </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
                   <span>{isDebate ? "辯論" : "嘴砲"} · 1v1</span>
